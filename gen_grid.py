@@ -3,7 +3,7 @@
 # Find a grid that has a good possibility of working with qxw-cli filler
 #
 import re
-
+import sys
 import random
 
 MAX_X=15
@@ -100,30 +100,12 @@ def rand_grid(rows, template=None):
     return grid
 
 
-def enumerate_grids():
+def enumerate_grids(template):
     valid_rows = []
     for i in range(0, 2**MAX_X):
         row = i
         if is_valid_row(i):
             valid_rows.append(i)
-
-    template = """
-......#...#....
-...............
-...............
-...............
-...............
-...............
-...............
-...............
-...............
-...............
-...............
-...............
-...............
-...............
-....#...#......
-"""
 
     tmpl_lines = template.strip().split()
     while True:
@@ -144,4 +126,10 @@ def enumerate_grids():
     l = ['#' for x in v if x == '#']
     print v
 
-enumerate_grids()
+if __name__ == "__main__":
+    template = sys.stdin.read()
+    MAX_X = len(template.split()[0])
+    try:
+        enumerate_grids(template)
+    except:
+        print template
