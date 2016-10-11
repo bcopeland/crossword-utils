@@ -12,23 +12,64 @@ from xd_clues import answer_at
 smooth = .001
 
 class Answer(object):
-    def __init__(self, x, y, d, pattern):
+    def __init__(self, corpus, x, y, d, pattern):
         self.x = x
         self.y = y
         self.d = d
         self.pattern = pattern
         self.possibles = []
-        self.crosses = []
 
-    def add_cross(self, a):
-        self.crosses.append(a)
+        if len(pattern) > 1 and '.' in pattern:
+            self.possibles = get_fill_matches(corpus, pattern)
+        else:
+            self.possibles = [(pattern, 100)]
 
+
+class Cell(object):
+    def __init__(self, x, y):
+        self.x = x
+        self.y = y
+        self.amap = {}
+        self.dmap = {}
+        self.a_answer = None
+        self.d_answer = None
+
+
+    def set_answer(self, answer):
+        if answer.d == 'A':
+            m = self.amap
+            self.a_answer = answer
+        else:
+            m = self.dmap
+            self.d_answer = answer
+
+        offs = max(self.x - answer.x, self.y - answer.y)
+        for s in answer.possibles:
+            cand, score = s
+            l = cand[offs]
+            entries = m.setdefault(l, [])
+            entries.append(s)
+
+    def eliminate(self):
+        akeys = set(self.amap.keys())
+        dkeys = set(self.dmap.keys())
+        keys_to_delete = akeys.symmetric_difference(dkeys)
+        for key in keys_to_delete:
+            if key in self.amap:
+                entries = self.amap.pop(key)
+                answer = self.a_answer
+            else:
+                entries = self.dmap.pop(key)
+                answer = self.d_answer
+            to_delete = set(entries)
+            answer.possibles = [x for x in answer.possibles if x not in to_delete]
 
 def load_corpus(fn):
     corpus = {}
     total_sum = 0
     for line in open(fn).readlines():
         ct, word = line.split()
+        word = word.upper()
         corpus.setdefault(word, 0)
         corpus[word] += int(ct)
         total_sum += int(ct)
@@ -53,8 +94,10 @@ def check_fill(corpus, grid):
     maxx = len(grid[0])
     maxy = len(grid)
 
-    # y -> x -> [across, down]
-    grid_to_answer = [[[None, None] for i in range(maxx)] for j in range(maxy)]
+    cells = [[None for i in range(maxx)] for j in range(maxy)]
+    for y in range(maxy):
+        for x in range(maxx):
+            cells[y][x] = Cell(x, y)
 
     answers = []
     # extract answers
@@ -71,36 +114,30 @@ def check_fill(corpus, grid):
                                (y + 1 < maxy and grid[y+1][x] != '#'))
 
             if start_of_xlight:
-                answers.append(Answer(x, y, 'A', answer_at(grid, (x, y), 'A')))
-                last_x_answer = answers[-1]
-            if start_of_ylight:
-                answers.append(Answer(x, y, 'D', answer_at(grid, (x, y), 'D')))
-                last_y_answer = answers[-1]
-            if light:
-                grid_to_answer[y][x][0] = last_x_answer
-                grid_to_answer[y][x][1] = last_y_answer
+                pat = answer_at(grid, (x, y), 'A')
+                answers.append(Answer(corpus, x, y, 'A', pat))
+                for i in range(len(pat)):
+                    cells[y][x+i].set_answer(answers[-1])
 
-    # extract crosses
+            if start_of_ylight:
+                pat = answer_at(grid, (x, y), 'D')
+                answers.append(Answer(corpus, x, y, 'D', pat))
+                for i in range(len(pat)):
+                    cells[y+i][x].set_answer(answers[-1])
+
+    # elimination
     for y in range(maxy):
         for x in range(maxx):
-            if grid_to_answer[y][x][0] and grid_to_answer[y][x][1]:
-                grid_to_answer[y][x][0].add_cross(grid_to_answer[y][x][1])
-                grid_to_answer[y][x][1].add_cross(grid_to_answer[y][x][0])
+            cells[y][x].eliminate()
 
-    for a in answers:
-        print 'answer: %s' % a.pattern
-
-    # drop filled and empty words or 1-letter words
-    words = [x.pattern for x in answers if len(x.pattern) > 1 and '.' in x.pattern]
-    matches = map(lambda x: get_fill_matches(corpus, x), words)
-    a_matches = zip(words, matches)
-
+    a_matches = [(ans.pattern, ans.possibles) for ans in answers if '.' in ans.pattern]
     sorted_matches = sorted(a_matches, key=lambda x: len(x[1]))
     return sorted_matches
 
 if __name__ == "__main__":
-    #corpus = load_corpus("nyt_corpus")
-    corpus = load_corpus("google/gug_corpus")
+    #corpus = load_corpus("all_corpus")
+    corpus = load_corpus("nyt_corpus")
+    #corpus = load_corpus("google/gug_corpus")
     #corpus = load_corpus("google/bigrams/all_2009_bigrams_unsorted")
     grid = sys.stdin.read().split()
     results = check_fill(corpus, grid)
