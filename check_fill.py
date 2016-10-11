@@ -24,6 +24,14 @@ class Answer(object):
         else:
             self.possibles = [(pattern, 100)]
 
+    def __str__(self):
+        return repr(self)
+
+    def __repr__(self):
+        return '%s,%s %s pat: %s, top: %s (%s)' % (
+            self.x, self.y, self.d,
+            self.pattern, self.possibles[0][0], self.possibles[0][1])
+
 
 class Cell(object):
     def __init__(self, x, y):
@@ -130,15 +138,39 @@ def check_fill(corpus, grid):
         for x in range(maxx):
             cells[y][x].eliminate()
 
-    a_matches = [(ans.pattern, ans.possibles) for ans in answers if '.' in ans.pattern]
-    sorted_matches = sorted(a_matches, key=lambda x: len(x[1]))
+    a_matches = [ans for ans in answers if '.' in ans.pattern]
+    sorted_matches = sorted(a_matches, key=lambda x: len(x.possibles))
     return sorted_matches
+
+def set_answer_at(grid, answer, value):
+    xinc = 1 if answer.d == 'A' else 0
+    yinc = 1 if answer.d == 'D' else 0
+    x, y = answer.x, answer.y
+    for i in range(len(value)):
+        s = grid[y + yinc * i]
+        grid[y + yinc * i] = s[:x+xinc * i] + value[i] + s[x+xinc * i+1:]
+
+
+def do_fill(corpus, grid):
+    while True:
+        results = check_fill(corpus, grid)
+        if not results or not len(results[0].possibles):
+            break
+
+        # fill hardest guy first
+        print 'results: %s' % results
+        choice = results[0].possibles[0][0]
+        set_answer_at(grid, results[0], choice)
+        corpus.pop(choice)
+        print 'New grid:\n%s' % ('\n'.join(grid))
+    return grid
+
 
 if __name__ == "__main__":
     #corpus = load_corpus("all_corpus")
-    corpus = load_corpus("nyt_corpus")
-    #corpus = load_corpus("google/gug_corpus")
+    #corpus = load_corpus("nyt_corpus")
+    corpus = load_corpus("google/gug_corpus")
     #corpus = load_corpus("google/bigrams/all_2009_bigrams_unsorted")
     grid = sys.stdin.read().split()
-    results = check_fill(corpus, grid)
-    print '\n\n'.join(['%s -> (%d) %s' % (x[0], len(x[1]), str(x[1][:30])) for x in results])
+    grid = do_fill(corpus, grid)
+    print '\n'.join(grid)
