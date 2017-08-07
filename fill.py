@@ -102,6 +102,10 @@ def char_to_bitmap(x):
 def bitmap_to_char(x):
     return chr(x + ord('a'))
 
+char_bitmap_table = [0] * 256
+for i in range(256):
+    char_bitmap_table[i] = char_to_bitmap(chr(i))
+
 def all_chars():
     return (1 << 27) - 1
 
@@ -124,7 +128,7 @@ class Cell:
 
     def _reset_valid(self):
         if self.value != '.':
-            self.valid_letters = (1 << char_to_bitmap(self.value))
+            self.valid_letters = (1 << char_bitmap_table[ord(self.value)])
         else:
             self.valid_letters = all_chars()
 
@@ -161,7 +165,7 @@ class Cell:
         if self.value != '.':
             return letter == self.value.lower()
 
-        return (1 << char_to_bitmap(letter)) & self.valid_letters
+        return (1 << char_bitmap_table[ord(letter)]) & self.valid_letters
 
 class Entry:
 
@@ -218,7 +222,7 @@ class Entry:
         for i in range(self.length):
             valid_letters = 0
             for fill in fills:
-                valid_letters |= (1 << char_to_bitmap(fill[i]))
+                valid_letters |= (1 << char_bitmap_table[ord(fill[i])])
             self.cells[i].apply_letter_mask(valid_letters)
 
     def est_fills(self, word):
@@ -269,7 +273,7 @@ class Entry:
 
             skip = False
             for j, x in enumerate(pattern):
-                if not (pattern[j] & (1 << char_to_bitmap(word[j]))):
+                if not (pattern[j] & (1 << char_bitmap_table[ord(word[j])])):
                     skip = True
                     break
             if skip:
