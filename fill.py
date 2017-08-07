@@ -47,6 +47,7 @@ class Wordlist(list):
 
     len_idx = {}
     scores = {}
+    bmaps = []
 
     # problem with this indexing scheme: changing the dictionary
     # means invaliding all cached indexes among all the entries.
@@ -83,6 +84,12 @@ class Wordlist(list):
             word, score = l
             if len(word) not in self.len_idx:
                 self.len_idx[len(word)] = i
+
+            bmap = [1 << char_bitmap_table[ord(x)] for x in word]
+            self.bmaps.append(bmap)
+
+    def bitmap_at(self, i):
+        return self.bmaps[i]
 
     def score(self, word):
         # incomplete pattern
@@ -161,12 +168,6 @@ class Cell:
     def apply_letter_mask(self, valid):
         self.valid_letters &= valid
 
-    def cross_viable(self, letter):
-        if self.value != '.':
-            return letter == self.value.lower()
-
-        return (1 << char_bitmap_table[ord(letter)]) & self.valid_letters
-
 class Entry:
 
     def __init__(self, cells, length, direction, wordlist, grid):
@@ -215,14 +216,15 @@ class Entry:
 
     def _recompute_valid_letters(self):
         if self.completed():
-            fills = [self.cell_pattern()]
+            pattern = self.cell_pattern()
+            fills = [[ 1 << char_bitmap_table[ord(x)] for x in pattern ]]
         else:
-            fills = [self.wordlist[i][0] for i in self.valid_words]
+            fills = [self.wordlist.bitmap_at(i) for i in self.valid_words]
 
         for i in range(self.length):
             valid_letters = 0
             for fill in fills:
-                valid_letters |= (1 << char_bitmap_table[ord(fill[i])])
+                valid_letters |= fill[i]
             self.cells[i].apply_letter_mask(valid_letters)
 
     def est_fills(self, word):
@@ -256,6 +258,8 @@ class Entry:
         return fill
 
     def satisfy(self):
+        global satisfy_ct
+        satisfy_ct += 1
 
         pattern = self.bitmap_pattern()
 
@@ -272,8 +276,9 @@ class Entry:
                 continue
 
             skip = False
+            bitmap = self.wordlist.bitmap_at(i)
             for j, x in enumerate(pattern):
-                if not (pattern[j] & (1 << char_bitmap_table[ord(word[j])])):
+                if not (x & bitmap[j]):
                     skip = True
                     break
             if skip:
@@ -380,8 +385,6 @@ class Grid:
         return num
 
     def satisfy_all(self):
-        global satisfy_ct
-        satisfy_ct += 1
         ct = 0
         changed = True
         while changed:
@@ -456,11 +459,11 @@ class Grid:
 
         self.satisfy_all()
 
-        stack.append([entry, 0, [], [], None])
+        stack.append([entry, [], [], None])
 
         while stack:
 
-            entry, index, saved_entries, saved_cells, fill = stack.pop()
+            entry, saved_entries, saved_cells, fill = stack.pop()
 
             if fill:
                 self.used_words.remove(fill)
@@ -497,7 +500,7 @@ class Grid:
             print 'grid:\n%s' % self
 
             # save a copy in case we have to unwind
-            stack.append([entry, index+1, saved_entries, saved_cells, fill])
+            stack.append([entry, saved_entries, saved_cells, fill])
 
             self.satisfy_all()
 
@@ -510,7 +513,7 @@ class Grid:
                 print 'no fills, trying again for %s' % stack[-1][0]
                 continue
 
-            stack.append([entry, 0, [], [], None])
+            stack.append([entry, [], [], None])
 
             # num_fills == 0, try next word in the list
             #print '\n'.join([str(x) for x in self.entries])
