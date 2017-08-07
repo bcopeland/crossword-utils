@@ -34,8 +34,6 @@
 # 1) upd flags for entries and cells
 # 2) save entries and cells before fill changes; restore if needed
 
-satisfy_ct = 0
-
 
 from operator import itemgetter
 import re
@@ -233,8 +231,6 @@ class Entry:
             cell.value = values[i]
         return count
 
-    def has_fill(self):
-        return self.fill_idx < len(self.valid_words) and len(self.valid_words)
 
     def fill(self, offs):
         if self.fill_idx >= len(self.valid_words):
@@ -398,8 +394,6 @@ class Grid:
         return num
 
     def satisfy_all(self):
-        global satisfy_ct
-        satisfy_ct += 1
         ct = 0
         changed = True
         while changed:
@@ -433,16 +427,7 @@ class Grid:
             #    (entry.length == best.length and (nfills == -1 or this_fills < nfills))):
                 best = entry
                 nfills = entry.num_fills()
-
-        if best.completed() or best.num_fills() == 0:
-            return None
         return best
-
-    def completed(self):
-        for entry in self.entries:
-            if not entry.completed():
-                return False
-        return True
 
     def __repr__(self):
         s = ''
@@ -465,75 +450,86 @@ class Grid:
         return None
 
     def fill(self, interactive=False):
-
-        stack = []
-
-        entry = self.get_next_fill_victim()
-        if not entry:
-            return 0
-
         self.satisfy_all()
 
-        stack.append([entry, 0, [], [], None])
+        num_fills = self.num_fills()
+        if num_fills <= 1:
+            return num_fills
 
-        while stack:
+        entry = self.get_next_fill_victim()
 
-            entry, index, saved_entries, saved_cells, fill = stack.pop()
+        # todo: while has more words at this level
+        while True:
 
-            if fill:
-                self.used_words.remove(fill)
-                for y, row in enumerate(saved_cells):
-                    for x, v in enumerate(row):
-                        self.cells[y][x].restore(v)
-
-                    for i, e in enumerate(self.entries):
-                        e.restore(saved_entries[i])
-                entry.fill_idx += 1
-
-            if not entry.has_fill():
-                # no words left, unwind
-                stack.pop()
-                print 'no fills, trying again for %s' % stack[-1][0]
-                continue
-
-            # fill next best word
-            print 'filling %s...' % entry
-
-            # save snapshot of entries and cells (wordlist, bitmaps)
             saved_entries = [x.checkpoint() for x in self.entries]
 
             saved_cells = [None] * self.height
             for y in range(self.height):
                 saved_cells[y] = [x.checkpoint() for x in self.cells[y]]
 
-            # get next best word, increment internal pointer
-            fill = entry.fill(0)
+            # fill next best word
+            print 'filling %s...' % entry
 
-            # mark this word used
+            # interactive help...
+            item = 0
+            if interactive:
+                poss = entry.valid_words[entry.fill_idx:entry.fill_idx + 20]
+                print 'Top 20 words:'
+                for i, w in enumerate(poss):
+                    entry.fill(i)
+                    self.satisfy_all()
+                    entry.fill_idx -= 1
+                    count = self.num_fills()
+
+                    for y, row in enumerate(saved_cells):
+                        for x, v in enumerate(row):
+                            self.cells[y][x].restore(v)
+                    for k, e in enumerate(self.entries):
+                        e.restore(saved_entries[k])
+
+                    print '  [%d] %s [%d]' % (i, entry.wordlist[w], count)
+
+                resp = raw_input('Select a word (default 0): ')
+                try:
+                    item = int(resp)
+                except:
+                    item = 0
+
+            fill = entry.fill(item)
+            if not fill:
+                break
+
             print 'selected %s...' % fill
             self.used_words.add(fill)
             print 'grid:\n%s' % self
 
-            # save a copy in case we have to unwind
-            stack.append([entry, index+1, saved_entries, saved_cells, fill])
-
-            self.satisfy_all()
-
             # and fill next level down
-            entry = self.get_next_fill_victim()
-            if not entry:
-                if self.completed():
-                    return 1
-
-                print 'no fills, trying again for %s' % stack[-1][0]
-                continue
-
-            stack.append([entry, 0, [], [], None])
+            num_fills = self.fill(interactive=interactive)
+            if num_fills == 1:
+                # done
+                for e in self.entries:
+                    if not e.completed():
+                        e.fill(0)
+                print 'grid:\n%s' % self
+                return num_fills
 
             # num_fills == 0, try next word in the list
-            #print '\n'.join([str(x) for x in self.entries])
+            # print '\n'.join([str(x) for x in self.entries])
+            self.used_words.remove(fill)
+            for y, row in enumerate(saved_cells):
+                for x, v in enumerate(row):
+                    self.cells[y][x].restore(v)
 
-        # tried all stack levels, quit
+            for i, e in enumerate(self.entries):
+                e.restore(saved_entries[i])
+
+            print 'no fills, trying again for %s\n' % entry
+            entry.fill_idx += 1
+
+            print 'grid:\n%s' % self
+
+
+        # out of words to try
         return 0
 
 
@@ -547,7 +543,7 @@ def main(tmpl, opts):
     grid.fill(interactive=opts.interactive)
     print 'grid:\n%s' % grid
     print 'score:\n%d' % grid.score()
-    print 'sat: %d' % satisfy_ct
+
 
 if __name__ == "__main__":
     parser = OptionParser(usage="%prog [--interactive] template")
