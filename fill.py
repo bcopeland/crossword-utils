@@ -253,12 +253,7 @@ class Entry:
 
     def satisfy(self, check_crosses=True):
 
-        regex = False
-        if regex:
-            pattern = self.cell_pattern()
-            regex = re.compile(pattern)
-        else:
-            pattern = self.bitmap_pattern()
+        pattern = self.bitmap_pattern()
 
         orig_len = len(self.valid_words)
         valid_words = []
@@ -272,32 +267,18 @@ class Entry:
             if len(word) != len(pattern):
                 continue
 
-            if regex:
-                if not regex.match(word):
-                    continue
-
             skip = False
             for j, x in enumerate(pattern):
                 if not (pattern[j] & (1 << char_to_bitmap(word[j]))):
                     skip = True
                     break
+                if check_crosses and not (self.cells[j].valid_letters & pattern[j]):
+                    skip = True
+                    break
             if skip:
                 continue
 
-            if check_crosses:
-                # only letters that the crosses can support
-                # we don't want to do this when rebuilding the word list after
-                # backtracking since valid_letters is stale
-                drop = False
-                for j in range(len(word)):
-                    if not self.cells[j].cross_viable(word[j]):
-                        drop = True
-                        break
-
-                if drop:
-                    continue
-
-                valid_words.append(i)
+            valid_words.append(i)
 
         self.valid_words = valid_words
         self._recompute_valid_letters()
