@@ -11,6 +11,8 @@ from xd_clues import answer_at
 
 smooth = .001
 
+used_answers = set()
+
 class Answer(object):
     def __init__(self, corpus, x, y, d, pattern):
         self.x = x
@@ -41,13 +43,18 @@ class Cell(object):
         self.dmap = {}
         self.a_answer = None
         self.d_answer = None
+        self.is_black = False
 
+    def set_black(self, is_black):
+        self.is_black = is_black
 
     def set_answer(self, answer):
         if answer.d == 'A':
+            self.amap = {}
             m = self.amap
             self.a_answer = answer
         else:
+            self.dmap = {}
             m = self.dmap
             self.d_answer = answer
 
@@ -62,17 +69,29 @@ class Cell(object):
         akeys = set(self.amap.keys())
         dkeys = set(self.dmap.keys())
         keys_to_delete = akeys.symmetric_difference(dkeys)
+        entries_to_delete = used_answers
         for key in keys_to_delete:
             if key in self.amap:
                 entries = self.amap.pop(key)
-                answer = self.a_answer
             else:
                 entries = self.dmap.pop(key)
-                answer = self.d_answer
-            to_delete = set(entries)
-            answer.possibles = [x for x in answer.possibles if x not in to_delete]
+            entries_to_delete = entries_to_delete.union(set(entries))
+
+        for a in (self.a_answer, self.d_answer):
+            if a:
+                a.possibles = [x for x in a.possibles if x not in entries_to_delete]
+
+    def __str__(self):
+        return repr(self)
+
+    def __repr__(self):
+        ok_letters = [x for x in set(self.amap.keys()).intersection(set(self.dmap.keys()))]
+        if len(ok_letters) == 1:
+            return ok_letters[0]
+        return '#' if self.is_black else '.'
 
 def load_corpus(fn):
+    print 'Loading corpus...'
     corpus = {}
     total_sum = 0
     for line in open(fn).readlines():
@@ -97,8 +116,9 @@ def get_fill_matches(corpus, word):
     best_matches = sorted(possibles, key=lambda x: x[1], reverse=True)
     return best_matches
 
-def check_fill(corpus, grid):
 
+def build_cell_array(corpus, grid):
+    print 'Constructing possible sets...'
     maxx = len(grid[0])
     maxy = len(grid)
 
@@ -113,6 +133,9 @@ def check_fill(corpus, grid):
     for y in range(maxy):
         for x in range(maxx):
             light = grid[y][x] != '#'
+
+            if not light:
+                cells[y][x].set_black(True)
 
             start_of_xlight = (light and
                                (x == 0 or grid[y][x-1] == '#') and
@@ -133,6 +156,12 @@ def check_fill(corpus, grid):
                 for i in range(len(pat)):
                     cells[y+i][x].set_answer(answers[-1])
 
+    return (cells, answers)
+
+def check_fill(cells, answers):
+    print 'Eliminating...'
+    maxy = len(cells)
+    maxx = len(cells[0])
     # elimination
     for y in range(maxy):
         for x in range(maxx):
@@ -142,35 +171,53 @@ def check_fill(corpus, grid):
     sorted_matches = sorted(a_matches, key=lambda x: len(x.possibles))
     return sorted_matches
 
-def set_answer_at(grid, answer, value):
+
+def set_answer_at(cells, answer, value):
     xinc = 1 if answer.d == 'A' else 0
     yinc = 1 if answer.d == 'D' else 0
-    x, y = answer.x, answer.y
-    for i in range(len(value)):
-        s = grid[y + yinc * i]
-        grid[y + yinc * i] = s[:x+xinc * i] + value[i] + s[x+xinc * i+1:]
 
+    new_answer = Answer(None, answer.x, answer.y, answer.d, value)
+    x, y = answer.x, answer.y
+
+    for i in range(len(value)):
+        cell = cells[y + yinc * i][x + xinc * i]
+        cell.set_answer(new_answer)
+
+def grid_str(cells):
+    maxy = len(cells)
+    maxx = len(cells[0])
+
+    grid = ''
+    for y in range(maxy):
+        line = ''
+        for x in range(maxx):
+            line += str(cells[y][x])
+        grid += line + "\n"
+    return grid
 
 def do_fill(corpus, grid):
+
+    cells, answers = build_cell_array(corpus, grid)
     while True:
-        results = check_fill(corpus, grid)
+        results = check_fill(cells, answers)
         if not results or not len(results[0].possibles):
             break
 
         # fill hardest guy first
         print 'results: %s' % results
         choice = results[0].possibles[0][0]
-        set_answer_at(grid, results[0], choice)
-        corpus.pop(choice)
-        print 'New grid:\n%s' % ('\n'.join(grid))
-    return grid
+        set_answer_at(cells, results[0], choice)
+        answers.remove(results[0])
+        used_answers.add(results[0].possibles[0])
+
+        print 'New grid:\n%s' % (grid_str(cells))
+    return grid_str(cells)
 
 
 if __name__ == "__main__":
     #corpus = load_corpus("all_corpus")
-    #corpus = load_corpus("nyt_corpus")
-    corpus = load_corpus("google/gug_corpus")
+    corpus = load_corpus("nyt_corpus")
+    #corpus = load_corpus("google/gug_corpus")
     #corpus = load_corpus("google/bigrams/all_2009_bigrams_unsorted")
     grid = sys.stdin.read().split()
-    grid = do_fill(corpus, grid)
-    print '\n'.join(grid)
+    print do_fill(corpus, grid)

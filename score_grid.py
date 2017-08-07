@@ -11,7 +11,7 @@ def load_corpus(fn):
     corpus = {}
     total_sum = 0
     for line in open(fn).readlines():
-        ct, word = line.split()
+        word, ct = line.split()
         corpus.setdefault(word, 0)
         corpus[word] += int(ct)
         total_sum += int(ct)
@@ -20,7 +20,7 @@ def load_corpus(fn):
 
 def score_word(corpus, w):
     p_word = math.log((corpus.get(w, 0) + smooth) / corpus['__denom'])
-    # print 'word: %s, score: %f' % (w, p_word)
+    print 'word: %s, score: %f' % (w, p_word)
     return p_word
 
 def transpose_grid(grid):
@@ -53,6 +53,6 @@ def score_grid(corpus, grid):
     return p
 
 if __name__ == "__main__":
-    corpus = load_corpus("nyt_corpus")
+    corpus = load_corpus("all_dict")
     grid = sys.stdin.read()
     print score_grid(corpus, grid)

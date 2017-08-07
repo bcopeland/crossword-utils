@@ -82,15 +82,22 @@ def rand_grid(rows, template=None):
         grid = template[:]
 
     perm = list(range(len(rows)))
-    for i in range(MAX_X/2):
+    for i in range(MAX_X/2+1):
         if template[i]:
             continue
 
         random.shuffle(perm)
         # try to find a compatible row shape...
         for j in perm:
+            rev = row_flip(rows[j])
+
+            # center row must be symmetric about center
+            if i == MAX_X/2:
+                if rev != rows[j]:
+                    continue
+
             grid[i] = rows[j]
-            grid[MAX_X - i - 1] = row_flip(rows[j])
+            grid[MAX_X - i - 1] = rev
             if is_valid_grid(grid):
                 break
 
