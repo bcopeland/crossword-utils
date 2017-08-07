@@ -187,7 +187,7 @@ class Entry:
         self.reset_dict()
         for i, c in enumerate(self.cells):
             c.set(word[i])
-        self.satisfy(False)
+        self.satisfy()
 
     def score(self):
         return self.wordlist.score(self.cell_pattern())
@@ -251,7 +251,7 @@ class Entry:
 
         return fill
 
-    def satisfy(self, check_crosses=True):
+    def satisfy(self):
 
         pattern = self.bitmap_pattern()
 
@@ -270,9 +270,6 @@ class Entry:
             skip = False
             for j, x in enumerate(pattern):
                 if not (pattern[j] & (1 << char_to_bitmap(word[j]))):
-                    skip = True
-                    break
-                if check_crosses and not (self.cells[j].valid_letters & pattern[j]):
                     skip = True
                     break
             if skip:
