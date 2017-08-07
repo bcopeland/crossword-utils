@@ -275,18 +275,16 @@ class Entry:
             if regex:
                 if not regex.match(word):
                     continue
-            else:
-                for j, x in enumerate(pattern):
-                    if not (pattern[j] & (1 << char_to_bitmap(word[j]))):
-                        continue
 
-            valid_words.append(i)
+            skip = False
+            for j, x in enumerate(pattern):
+                if not (pattern[j] & (1 << char_to_bitmap(word[j]))):
+                    skip = True
+                    break
+            if skip:
+                continue
 
-        if check_crosses:
-            keep = []
-            for word_id in valid_words:
-                word = self.wordlist[word_id][0]
-
+            if check_crosses:
                 # only letters that the crosses can support
                 # we don't want to do this when rebuilding the word list after
                 # backtracking since valid_letters is stale
@@ -295,9 +293,11 @@ class Entry:
                     if not self.cells[j].cross_viable(word[j]):
                         drop = True
                         break
-                if not drop:
-                    keep.append(word_id)
-            valid_words = keep
+
+                if drop:
+                    continue
+
+                valid_words.append(i)
 
         self.valid_words = valid_words
         self._recompute_valid_letters()
