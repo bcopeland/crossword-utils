@@ -38,7 +38,6 @@ satisfy_ct = 0
 
 
 from operator import itemgetter
-import re
 import string
 import random
 from optparse import OptionParser
@@ -471,8 +470,8 @@ class Grid:
                     for x, v in enumerate(row):
                         self.cells[y][x].restore(v)
 
-                    for i, e in enumerate(self.entries):
-                        e.restore(saved_entries[i])
+                for i, e in enumerate(self.entries):
+                    e.restore(saved_entries[i])
                 entry.fill_idx += 1
 
             if not entry.has_fill():
@@ -491,8 +490,33 @@ class Grid:
             for y in range(self.height):
                 saved_cells[y] = [x.checkpoint() for x in self.cells[y]]
 
+            # interactive choice
+            item = 0
+            if interactive:
+                poss = entry.valid_words[entry.fill_idx:entry.fill_idx + 20]
+                print 'Top 20 words:'
+                for i, w in enumerate(poss):
+                    entry.fill(i)
+                    self.satisfy_all()
+                    entry.fill_idx -= 1
+                    count = self.num_fills()
+
+                    for y, row in enumerate(saved_cells):
+                        for x, v in enumerate(row):
+                            self.cells[y][x].restore(v)
+
+                    for j, e in enumerate(self.entries):
+                        e.restore(saved_entries[j])
+
+                    print '  [%d] %s [%d]' % (i, entry.wordlist[w], count)
+                resp = raw_input('Select a word (default 0): ')
+                try:
+                    item = int(resp)
+                except:
+                    item = 0
+
             # get next best word, increment internal pointer
-            fill = entry.fill(0)
+            fill = entry.fill(item)
 
             # mark this word used
             print 'selected %s...' % fill
