@@ -12,9 +12,9 @@
 from fill import Wordlist, Grid
 import random
 
-do_not_change = ['pacificave','theodyssey','caravanroute','siennamiller','tearfulness','standsalone']
+themer_len=10
 
-def clear_entry(e, branch):
+def clear_entry(e, themers, branch):
 
     pattern = ''
     xentries = []
@@ -22,7 +22,7 @@ def clear_entry(e, branch):
         xe = cell.cross_entry(e)
 
         # don't clear out themers
-        if xe.cell_pattern() in do_not_change:
+        if xe.cell_pattern().lower() in themers:
             pattern += cell.value
         else:
             xentries.append(xe)
@@ -31,10 +31,10 @@ def clear_entry(e, branch):
     for xe in xentries:
         xe.reset_dict()
         if branch > 0:
-            clear_entry(xe, branch-1)
+            clear_entry(xe, themers, branch-1)
 
-def main(tmpl):
-    words = Wordlist('XwiWordList.txt', randomize=1.0, omit=['anitra'])
+def main(tmpl, themers=[]):
+    words = Wordlist('XwiWordList.txt', randomize=1.0, omit=[])
     orig_grid = Grid(tmpl, words)
     orig_score = orig_grid.score()
 
@@ -52,12 +52,12 @@ def main(tmpl):
         entries = grid.scored_entries()
 
         e = random.choice(entries)
-        if e.cell_pattern() in do_not_change:
+        if e.cell_pattern().lower() in themers:
             continue
 
         branch = random.randint(0,3)
         print 'clearing: %s branch %d' % (e, branch)
-        clear_entry(e, branch)
+        clear_entry(e, themers, branch)
 
         grid.fill()
 
@@ -75,4 +75,4 @@ def main(tmpl):
 if __name__ == "__main__":
     import sys
     tmpl = open(sys.argv[1]).read()
-    main(tmpl)
+    main(tmpl, themers=set(['bbel', 'bouncingbboy', 'cryb', 'bsittersclub', 'bgotback', 'bdaddy', 'sugarb', 'achtungb', 'cope', 'land']))
