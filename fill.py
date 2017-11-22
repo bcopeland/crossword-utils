@@ -34,10 +34,9 @@
 # 1) upd flags for entries and cells
 # 2) save entries and cells before fill changes; restore if needed
 
-satisfy_ct = 0
-
 
 from operator import itemgetter
+import re
 import string
 import random
 from optparse import OptionParser
@@ -46,7 +45,6 @@ class Wordlist(list):
 
     len_idx = {}
     scores = {}
-    bmaps = []
 
     # problem with this indexing scheme: changing the dictionary
     # means invaliding all cached indexes among all the entries.
@@ -84,12 +82,6 @@ class Wordlist(list):
             if len(word) not in self.len_idx:
                 self.len_idx[len(word)] = i
 
-            bmap = [1 << char_bitmap_table[ord(x)] for x in word]
-            self.bmaps.append(bmap)
-
-    def bitmap_at(self, i):
-        return self.bmaps[i]
-
     def score(self, word):
         # incomplete pattern
         if '.' in word:
@@ -107,10 +99,6 @@ def char_to_bitmap(x):
 
 def bitmap_to_char(x):
     return chr(x + ord('a'))
-
-char_bitmap_table = [0] * 256
-for i in range(256):
-    char_bitmap_table[i] = char_to_bitmap(chr(i))
 
 def all_chars():
     return (1 << 27) - 1
@@ -134,7 +122,7 @@ class Cell:
 
     def _reset_valid(self):
         if self.value != '.':
-            self.valid_letters = (1 << char_bitmap_table[ord(self.value)])
+            self.valid_letters = (1 << char_to_bitmap(self.value))
         else:
             self.valid_letters = all_chars()
 
@@ -167,6 +155,12 @@ class Cell:
     def apply_letter_mask(self, valid):
         self.valid_letters &= valid
 
+    def cross_viable(self, letter):
+        if self.value != '.':
+            return letter == self.value.lower()
+
+        return (1 << char_to_bitmap(letter)) & self.valid_letters
+
 class Entry:
 
     def __init__(self, cells, length, direction, wordlist, grid):
@@ -191,7 +185,7 @@ class Entry:
         self.reset_dict()
         for i, c in enumerate(self.cells):
             c.set(word[i])
-        self.satisfy()
+        self.satisfy(False)
 
     def score(self):
         return self.wordlist.score(self.cell_pattern())
@@ -215,15 +209,14 @@ class Entry:
 
     def _recompute_valid_letters(self):
         if self.completed():
-            pattern = self.cell_pattern()
-            fills = [[ 1 << char_bitmap_table[ord(x)] for x in pattern ]]
+            fills = [self.cell_pattern()]
         else:
-            fills = [self.wordlist.bitmap_at(i) for i in self.valid_words]
+            fills = [self.wordlist[i][0] for i in self.valid_words]
 
         for i in range(self.length):
             valid_letters = 0
             for fill in fills:
-                valid_letters |= fill[i]
+                valid_letters |= (1 << char_to_bitmap(fill[i]))
             self.cells[i].apply_letter_mask(valid_letters)
 
     def est_fills(self, word):
@@ -238,8 +231,6 @@ class Entry:
             cell.value = values[i]
         return count
 
-    def has_fill(self):
-        return self.fill_idx < len(self.valid_words) and len(self.valid_words)
 
     def fill(self, offs):
         if self.fill_idx >= len(self.valid_words):
@@ -256,11 +247,14 @@ class Entry:
 
         return fill
 
-    def satisfy(self):
-        global satisfy_ct
-        satisfy_ct += 1
+    def satisfy(self, check_crosses=True):
 
-        pattern = self.bitmap_pattern()
+        regex = False
+        if regex:
+            pattern = self.cell_pattern()
+            regex = re.compile(pattern)
+        else:
+            pattern = self.bitmap_pattern()
 
         orig_len = len(self.valid_words)
         valid_words = []
@@ -274,16 +268,32 @@ class Entry:
             if len(word) != len(pattern):
                 continue
 
-            skip = False
-            bitmap = self.wordlist.bitmap_at(i)
-            for j, x in enumerate(pattern):
-                if not (x & bitmap[j]):
-                    skip = True
-                    break
-            if skip:
-                continue
+            if regex:
+                if not regex.match(word):
+                    continue
+            else:
+                for j, x in enumerate(pattern):
+                    if not (pattern[j] & (1 << char_to_bitmap(word[j]))):
+                        continue
 
             valid_words.append(i)
+
+        if check_crosses:
+            keep = []
+            for word_id in valid_words:
+                word = self.wordlist[word_id][0]
+
+                # only letters that the crosses can support
+                # we don't want to do this when rebuilding the word list after
+                # backtracking since valid_letters is stale
+                drop = False
+                for j in range(len(word)):
+                    if not self.cells[j].cross_viable(word[j]):
+                        drop = True
+                        break
+                if not drop:
+                    keep.append(word_id)
+            valid_words = keep
 
         self.valid_words = valid_words
         self._recompute_valid_letters()
@@ -319,6 +329,7 @@ class Grid:
         self.cells = [None] * self.height
         self.entries = []
         self.used_words = set()
+        self.iterations = 0
 
         for y in range(self.height):
             self.cells[y] = []
@@ -393,7 +404,20 @@ class Grid:
                 this_changed = entry.satisfy()
                 changed = changed or this_changed
 
-    def get_next_fill_victim(self):
+    def get_next_fill_victim(self, interactive=False):
+
+        if interactive:
+            to_fill = [x for x in self.entries if not x.completed()]
+            to_fill = sorted(to_fill, key = lambda x: x.num_fills())
+            for i, entry in enumerate(to_fill):
+                print '  [%d] %s [n: %d]' % (i, entry, entry.num_fills())
+
+            resp = raw_input('Select an entry (default 0): ')
+            try:
+                item = int(resp)
+            except:
+                item = 0
+            return to_fill[item]
 
         # find first unfilled down
         if False:
@@ -417,16 +441,7 @@ class Grid:
             #    (entry.length == best.length and (nfills == -1 or this_fills < nfills))):
                 best = entry
                 nfills = entry.num_fills()
-
-        if best.completed() or best.num_fills() == 0:
-            return None
         return best
-
-    def completed(self):
-        for entry in self.entries:
-            if not entry.completed():
-                return False
-        return True
 
     def __repr__(self):
         s = ''
@@ -448,49 +463,32 @@ class Grid:
                 return x
         return None
 
-    def fill(self, interactive=False):
+    def fill(self, interactive=False, max_iterations=0):
 
-        stack = []
-
-        entry = self.get_next_fill_victim()
-        if not entry:
-            return 0
-
+        self.iterations += 1
+        if max_iterations and self.iterations > max_iterations:
+            return 1
         self.satisfy_all()
 
-        stack.append([entry, [], [], None])
+        num_fills = self.num_fills()
+        if num_fills <= 1:
+            return num_fills
 
-        while stack:
+        entry = self.get_next_fill_victim(interactive)
 
-            entry, saved_entries, saved_cells, fill = stack.pop()
+        # todo: while has more words at this level
+        while True:
 
-            if fill:
-                self.used_words.remove(fill)
-                for y, row in enumerate(saved_cells):
-                    for x, v in enumerate(row):
-                        self.cells[y][x].restore(v)
-
-                for i, e in enumerate(self.entries):
-                    e.restore(saved_entries[i])
-                entry.fill_idx += 1
-
-            if not entry.has_fill():
-                # no words left, unwind
-                stack.pop()
-                print 'no fills, trying again for %s' % stack[-1][0]
-                continue
-
-            # fill next best word
-            print 'filling %s...' % entry
-
-            # save snapshot of entries and cells (wordlist, bitmaps)
             saved_entries = [x.checkpoint() for x in self.entries]
 
             saved_cells = [None] * self.height
             for y in range(self.height):
                 saved_cells[y] = [x.checkpoint() for x in self.cells[y]]
 
-            # interactive choice
+            # fill next best word
+            print 'filling %s...' % entry
+
+            # interactive help...
             item = 0
             if interactive:
                 poss = entry.valid_words[entry.fill_idx:entry.fill_idx + 20]
@@ -504,63 +502,72 @@ class Grid:
                     for y, row in enumerate(saved_cells):
                         for x, v in enumerate(row):
                             self.cells[y][x].restore(v)
-
-                    for j, e in enumerate(self.entries):
-                        e.restore(saved_entries[j])
+                    for k, e in enumerate(self.entries):
+                        e.restore(saved_entries[k])
 
                     print '  [%d] %s [%d]' % (i, entry.wordlist[w], count)
+
                 resp = raw_input('Select a word (default 0): ')
                 try:
                     item = int(resp)
                 except:
                     item = 0
 
-            # get next best word, increment internal pointer
             fill = entry.fill(item)
+            if not fill:
+                break
 
-            # mark this word used
             print 'selected %s...' % fill
             self.used_words.add(fill)
             print 'grid:\n%s' % self
 
-            # save a copy in case we have to unwind
-            stack.append([entry, saved_entries, saved_cells, fill])
-
-            self.satisfy_all()
-
             # and fill next level down
-            entry = self.get_next_fill_victim()
-            if not entry:
-                if self.completed():
-                    return 1
-
-                print 'no fills, trying again for %s' % stack[-1][0]
-                continue
-
-            stack.append([entry, [], [], None])
+            num_fills = self.fill(interactive=interactive, max_iterations=max_iterations)
+            if num_fills == 1:
+                # done
+                for e in self.entries:
+                    if not e.completed():
+                        e.fill(0)
+                print 'grid:\n%s' % self
+                return num_fills
 
             # num_fills == 0, try next word in the list
-            #print '\n'.join([str(x) for x in self.entries])
+            # print '\n'.join([str(x) for x in self.entries])
+            self.used_words.remove(fill)
+            for y, row in enumerate(saved_cells):
+                for x, v in enumerate(row):
+                    self.cells[y][x].restore(v)
 
-        # tried all stack levels, quit
+            for i, e in enumerate(self.entries):
+                e.restore(saved_entries[i])
+
+            print 'no fills, trying again for %s\n' % entry
+            entry.fill_idx += 1
+
+            print 'grid:\n%s' % self
+
+
+        # out of words to try
         return 0
 
 
 def main(tmpl, opts):
-    words = Wordlist('XwiWordList.txt')
+    words = Wordlist('XwiWordList.txt', opts.randomize)
     print words[0:10]
     grid = Grid(tmpl, words)
     print grid.num_fills()
     print '\n'.join([str(x) for x in grid.entries])
 
-    grid.fill(interactive=opts.interactive)
+    grid.fill(interactive=opts.interactive, max_iterations=opts.max_iterations)
     print 'grid:\n%s' % grid
     print 'score:\n%d' % grid.score()
-    print 'sat: %d' % satisfy_ct
+
 
 if __name__ == "__main__":
     parser = OptionParser(usage="%prog [--interactive] template")
     parser.add_option('-i', '--interactive', action='store_true')
+    parser.add_option('-m', '--max-iterations', action='store', type="int", default=0)
+    parser.add_option('-r', '--randomize', action='store', type="float", default=0.0)
     (opts, args) = parser.parse_args()
     tmpl = open(args[0]).read()
     main(tmpl, opts)
