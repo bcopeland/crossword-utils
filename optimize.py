@@ -18,6 +18,10 @@ def clear_entry(e, themers, branch):
 
     pattern = ''
     xentries = []
+
+    if e.cell_pattern().lower() in themers:
+        return
+
     for cell in e.cells:
         xe = cell.cross_entry(e)
 
@@ -34,7 +38,8 @@ def clear_entry(e, themers, branch):
             clear_entry(xe, themers, branch-1)
 
 def main(tmpl, themers=[]):
-    words = Wordlist('XwiWordList.txt', randomize=1.0, omit=[])
+    wordfile = 'XwiWordList.txt'
+    words = Wordlist(wordfile, randomize=1.0, omit=[])
     orig_grid = Grid(tmpl, words)
     orig_score = orig_grid.score()
 
@@ -47,7 +52,7 @@ def main(tmpl, themers=[]):
     print 'newnew: %s' % best_grid.score()
 
     while True:
-        newwordlist = Wordlist('XwiWordList.txt', randomize=0.2, omit=['anitra'])
+        newwordlist = Wordlist(wordfile, randomize=0.2, omit=[])
         grid = best_grid.copy(wordlist=newwordlist)
         entries = grid.scored_entries()
 
@@ -75,4 +80,4 @@ def main(tmpl, themers=[]):
 if __name__ == "__main__":
     import sys
     tmpl = open(sys.argv[1]).read()
-    main(tmpl, themers=set(['bbel', 'bouncingbboy', 'cryb', 'bsittersclub', 'bgotback', 'bdaddy', 'sugarb', 'achtungb', 'cope', 'land']))
+    main(tmpl, themers=set([]))
