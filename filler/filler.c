@@ -626,8 +626,6 @@ static bool fill_step(struct fill_context *ctx)
 			       sizeof(stack->saved_valid[i].words[0]));
 			entry->valid.num_words = stack->saved_valid[i].num_words;
 		}
-		/* FIXME needed ? */
-		satisfy_all(ctx);
 	}
 	if (fill_is_completed(ctx))
 		return true;
@@ -669,6 +667,7 @@ static bool fill(struct fill_context *ctx)
 	struct stack_level *stack;
 	int count = 0;
 
+	satisfy_all(ctx);
 	stack = stack_level_new(ctx);
 	stack->entry = find_next_fill_victim(ctx);
 	stack_push(ctx, stack);
