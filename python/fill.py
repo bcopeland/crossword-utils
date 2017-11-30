@@ -2,39 +2,6 @@
 #
 # fill test code
 
-# todo
-# - fix computed cross list after backtracking
-# - drop used_words for this level of state
-# - randomize selection
-
-# some things filler.c does:
-#  - update flag; only have to look at the changed parts of an entry
-#
-# if we fill words and letter map does not change, no need to also
-# update crosses
-#
-
-#
-# update:
-#  - if we changed a word, obviously wordlist is now just that word
-#    and all crosses must be updated
-#  - _only_ if the update process changes valid letters do crosses
-#    then need to be examined.
-#
-#  or, just have a per-cell dirty flag which indicates valid_letters
-#  changed; any crosses then need to be evaluated for all entries,
-#  propagate outwards...
-
-#
-# reset:
-#  - is costly because we call revalidate all
-#  - would be cheaper if we could just restore state to before the fill
-
-# ... just implement like filler.c, basically just need:
-# 1) upd flags for entries and cells
-# 2) save entries and cells before fill changes; restore if needed
-
-
 from operator import itemgetter
 import re
 import string
