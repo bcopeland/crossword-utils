@@ -635,17 +635,17 @@ static bool fill_step(struct fill_context *ctx)
 		return false;
 	}
 
-	/* FIXME can we avoid recopying when backtracking? */
-	memcpy(stack->saved_cells, ctx->cells,
-	       ctx->num_cells * sizeof(stack->saved_cells[0]));
-	list_for_each_entry(entry, &ctx->entries, list) {
-		if (stack->saved)
-			free(stack->saved_valid[entry->entry_id].words);
-		valid_wordlist_copy(&stack->saved_valid[entry->entry_id], &entry->valid);
+	if (!stack->saved) {
+		memcpy(stack->saved_cells, ctx->cells,
+		       ctx->num_cells * sizeof(stack->saved_cells[0]));
+		list_for_each_entry(entry, &ctx->entries, list) {
+			if (stack->saved)
+				free(stack->saved_valid[entry->entry_id].words);
+			valid_wordlist_copy(&stack->saved_valid[entry->entry_id], &entry->valid);
+		}
+		stack->saved = true;
 	}
-	stack->saved = true;
 
-	print_entry(stack->entry);
 	word = entry_fill(stack->entry);
 	if (!word) {
 		stack_level_free(ctx, stack);
@@ -653,7 +653,6 @@ static bool fill_step(struct fill_context *ctx)
 	}
 
 	stack->filled_word = word;
-	printf("selected %s...\n", word->word);
 	stack_push(ctx, stack);
 	satisfy_all(ctx);
 	stack = stack_level_new(ctx);
@@ -672,11 +671,10 @@ static bool fill(struct fill_context *ctx)
 	stack->entry = find_next_fill_victim(ctx);
 	stack_push(ctx, stack);
 
-	while (!list_empty(&ctx->stack) && count++ < 20000) {
-		if (fill_step(ctx))
+	while (!list_empty(&ctx->stack) && count++ < 200000) {
+		if (fill_step(ctx)) {
 			return true;
-		print_grid(ctx);
-		printf("\n\n\n");
+        }
 	}
 	return false;
 }
@@ -708,8 +706,6 @@ int main(int argc, char *argv[])
 	load_wordlist(fp, wordlist);
 	fill_init(&ctx, template, wordlist);
 	satisfy_all(&ctx);
-	print_grid(&ctx);
-	print_entries(&ctx);
 
 	fill(&ctx);
 	print_grid(&ctx);
