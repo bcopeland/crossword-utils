@@ -97,9 +97,9 @@ struct fill_context
 	int width;
 };
 
-static bool is_power_of_two(uint32_t bitmap)
+static bool is_one_bit_set(uint32_t bitmap)
 {
-	return !(bitmap & (bitmap - 1));
+	return bitmap && !(bitmap & (bitmap - 1));
 }
 
 static char bitmap_to_char(uint32_t bitmap)
@@ -109,7 +109,7 @@ static char bitmap_to_char(uint32_t bitmap)
 	if (!bitmap)
 		return '!';
 
-	if (is_power_of_two(bitmap)) {
+	if (is_one_bit_set(bitmap)) {
 		ch = 'A' + ffs(bitmap) - 1;
 		if (ch == '[')
 			ch = '#';
@@ -240,7 +240,7 @@ static void entry_recompute_valid_letters(struct entry *entry)
 static bool is_completed(struct entry *entry)
 {
 	for (int i = 0; i < entry->num_cells; i++) {
-		if (!is_power_of_two(entry->cells[i]->valid_letters))
+		if (!is_one_bit_set(entry->cells[i]->valid_letters))
 			return false;
 	}
 	return true;
