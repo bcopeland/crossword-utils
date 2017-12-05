@@ -5,6 +5,8 @@
 #include <stdio.h>
 #include <ctype.h>
 #include <limits.h>
+#include <getopt.h>
+#include <time.h>
 #include "list.h"
 #include "util.h"
 
@@ -661,6 +663,27 @@ static bool fill_step(struct fill_context *ctx)
 	return false;
 }
 
+static void randomize(struct fill_context *ctx, float amt)
+{
+	int i, x, y, tmp;
+	struct entry *entry;
+
+	if (amt < 0.01 || amt > 1.0)
+		return;
+
+	srand48(time(NULL));
+	list_for_each_entry(entry, &ctx->entries, list) {
+		int num_swaps = amt * entry->valid.num_words;
+		for (i = 0; i < num_swaps; i++) {
+			x = drand48() * entry->valid.num_words;
+			y = drand48() * entry->valid.num_words;
+			tmp = entry->valid.words[x];
+			entry->valid.words[x] = entry->valid.words[y];
+			entry->valid.words[y] = tmp;
+		}
+	}
+}
+
 static bool fill(struct fill_context *ctx)
 {
 	struct stack_level *stack;
@@ -674,7 +697,7 @@ static bool fill(struct fill_context *ctx)
 	while (!list_empty(&ctx->stack) && count++ < 200000) {
 		if (fill_step(ctx)) {
 			return true;
-        }
+		}
 	}
 	return false;
 }
@@ -684,17 +707,35 @@ int main(int argc, char *argv[])
 	struct fill_context ctx;
 	struct wordlist *wordlist;
 	char template[(MAX_WORD_LEN + 1) * MAX_WORD_LEN + 1];
+	char *dictionary = "dictionary.txt";
 	size_t read;
 	int i;
+	int option, option_index;
+	float randomize_amt = 0.0;
+	static struct option long_options[] = {
+		{"dict", required_argument, NULL, 'd'},
+		{"randomize", required_argument, NULL, 'r'},
+		{0, 0, 0, 0}
+	};
 
-	if (argc < 2) {
-		fprintf(stderr, "Usage: %s [dictionary] < template\n", argv[0]);
-		exit(1);
+	while ((option = getopt_long(argc, argv, "d:r:", long_options,
+		&option_index)) != -1) {
+
+		switch (option) {
+		case 'd':
+			dictionary = optarg;
+			break;
+		case 'r':
+			randomize_amt = strtof(optarg, NULL);
+			break;
+		}
 	}
 
-	FILE *fp = fopen(argv[1], "r");
-	if (!fp)
+	FILE *fp = fopen(dictionary, "r");
+	if (!fp) {
+		fprintf(stderr, "Could not open dictionary `%s`", dictionary);
 		exit(1);
+	}
 
 	read = fread(template, 1, sizeof(template)-1, stdin);
 	if (!read)
@@ -705,6 +746,7 @@ int main(int argc, char *argv[])
 	wordlist = wordlist_new();
 	load_wordlist(fp, wordlist);
 	fill_init(&ctx, template, wordlist);
+	randomize(&ctx, randomize_amt);
 	satisfy_all(&ctx);
 
 	fill(&ctx);
